@@ -12,7 +12,7 @@ import base64
 def connect(server='localhost', port=9090):
     transport = TBufferedTransport(TSocket(server, int(port)))
     transport.open()
-    protocol = TBinaryProtocol.TBinaryProtocol(transport)
+    protocol = TBinaryProtocol.TBinaryProtocolAccelerated(transport)
     client = Hbase.Client(protocol)
     return client
 

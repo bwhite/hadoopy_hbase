@@ -48,11 +48,18 @@ def delete_rows(client, table, max_rows):
             client.deleteAllRow(table, str(x))
 
 
-def simple(client, max_rows):
+def create_table(client, name, columns, cfparams):
+    # TODO: Call hbase shell directly
+    client.createTable(name, [ColumnDescriptor(x, **cfparams) for x in columns])
+    #hadoopy_hbase.ColumnDescriptor('attr:', maxVersions=1),
+    #compression='SNAPPY'
+
+
+def simple(client, max_rows, cfparams):
     print('\nsimple')
     remove_table(client, 'benchtable')
     with timer('createTable'):
-        client.createTable('benchtable', [ColumnDescriptor('cf0:')])
+        create_table(client, 'benchtable', ['cf0:'], cfparams)
 
     with timer('mutateRow:Create'):
         for x in xrange(max_rows):
@@ -64,12 +71,13 @@ def simple(client, max_rows):
     scanner(client, 'benchtable', '', 1, max_rows)
     remove_table(client, 'benchtable')
 
-def small_large_1cf(client, max_rows):
+
+def small_large_1cf(client, max_rows, cfparams):
     print('\nsmall_large_1cf')
     remove_table(client, 'benchtable')
     with timer('createTable'):
-        client.createTable('benchtable', [ColumnDescriptor('cf0:')])
-    
+        create_table(client, 'benchtable', ['cf0:'], cfparams)
+
     with timer('mutateRow:Create-small'):
         for x in xrange(max_rows):
             client.mutateRow('benchtable', str(x), [Mutation(column='cf0:small', value=random_string(2 ** 10))])
@@ -91,11 +99,11 @@ def small_large_1cf(client, max_rows):
     remove_table(client, 'benchtable')
 
 
-def small_large_2cf(client, max_rows):
+def small_large_2cf(client, max_rows, cfparams):
     print('\nsmall_large_2cf')
     remove_table(client, 'benchtable')
     with timer('createTable'):
-        client.createTable('benchtable', [ColumnDescriptor('cf0:'), ColumnDescriptor('cf1:')])
+        create_table(client, 'benchtable', ['cf0:', 'cf1:'], cfparams)
     
     with timer('mutateRow:Create-small'):
         for x in xrange(max_rows):
@@ -118,12 +126,11 @@ def small_large_2cf(client, max_rows):
     remove_table(client, 'benchtable')
 
 
-def few_many_1cf(client, max_rows):
+def few_many_1cf(client, max_rows, cfparams):
     print('\nfew_many_1cf')
     remove_table(client, 'benchtable')
     with timer('createTable'):
-        client.createTable('benchtable', [ColumnDescriptor('cf0:')])
-    
+        create_table(client, 'benchtable', ['cf0:'], cfparams)
     with timer('mutateRow:Create-few'):
         for x in xrange(max_rows):
             if x % 100 == 0:
@@ -148,11 +155,11 @@ def few_many_1cf(client, max_rows):
     remove_table(client, 'benchtable')
 
 
-def few_many_2cf(client, max_rows):
+def few_many_2cf(client, max_rows, cfparams):
     print('\nfew_many_2cf')
     remove_table(client, 'benchtable')
     with timer('createTable'):
-        client.createTable('benchtable', [ColumnDescriptor('cf0:'), ColumnDescriptor('cf1:')])
+        create_table(client, 'benchtable', ['cf0:', 'cf1:'], cfparams)
     
     with timer('mutateRow:Create-few'):
         for x in xrange(max_rows):
@@ -178,13 +185,12 @@ def few_many_2cf(client, max_rows):
     remove_table(client, 'benchtable')
 
 
-def manycols_1cf(client, max_rows):
+def manycols_1cf(client, max_rows, cfparams):
     print('\nmanycols_1cf')
     num_cols = 100
     remove_table(client, 'benchtable')
     with timer('createTable'):
-        client.createTable('benchtable', [ColumnDescriptor('cf0:')])
-    
+        create_table(client, 'benchtable', ['cf0:'], cfparams)
     with timer('mutateRow:Create'):
         for x in xrange(max_rows):
             client.mutateRow('benchtable', str(x), [Mutation(column='cf0:%d' % y, value=random_string(2 ** 5)) for y in xrange(num_cols)])
@@ -198,13 +204,12 @@ def manycols_1cf(client, max_rows):
     remove_table(client, 'benchtable')
 
 
-def manycols_manycf(client, max_rows):
+def manycols_manycf(client, max_rows, cfparams):
     print('\nmanycols_manycf')
     num_cols = 100
     remove_table(client, 'benchtable')
     with timer('createTable'):
-        client.createTable('benchtable', [ColumnDescriptor('cf%d:' % x) for x in xrange(num_cols)])
-    
+        create_table(client, 'benchtable', ['cf%d:' % x for x in xrange(num_cols)], cfparams)
     with timer('mutateRow:Create'):
         for x in xrange(max_rows):
             client.mutateRow('benchtable', str(x), [Mutation(column='cf%d:%d' % (y, y), value=random_string(2 ** 5)) for y in xrange(num_cols)])
@@ -218,13 +223,14 @@ def manycols_manycf(client, max_rows):
     remove_table(client, 'benchtable')
 
 
-
 if __name__ == '__main__':
     client = hadoopy_hbase.connect('localhost')
-    simple(client, 1000)
-    small_large_1cf(client, 100)
-    small_large_2cf(client, 100)
-    few_many_1cf(client, 10000)
-    few_many_2cf(client, 10000)
-    manycols_1cf(client, 100)
-    manycols_manycf(client, 100)
+    for block_size in [65536 / 2, 65536, 65536 * 2]:
+        cfparams = {'maxVersions': 1, 'blockSize': block_size}
+        simple(client, 1000, cfparams)
+        small_large_1cf(client, 100, cfparams)
+        small_large_2cf(client, 100, cfparams)
+        few_many_1cf(client, 10000, cfparams)
+        few_many_2cf(client, 10000, cfparams)
+        manycols_1cf(client, 100, cfparams)
+        manycols_manycf(client, 100, cfparams)
