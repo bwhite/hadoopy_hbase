@@ -72,12 +72,12 @@ def _launch_args(hbase_in, hbase_out, columns, start_row, stop_row, single_value
 
 def launch_frozen(in_name, out_name, script_path, hbase_in=True, hbase_out=False, columns=(), start_row=None, stop_row=None, single_value=None, **kw):
     _launch_args(hbase_in, hbase_out, columns, start_row, stop_row, single_value, kw)
-    hadoopy.launch_frozen(in_name, out_name, script_path, **kw)
+    return hadoopy.launch_frozen(in_name, out_name, script_path, **kw)
 
 
 def launch(in_name, out_name, script_path, hbase_in=True, hbase_out=False, columns=(), start_row=None, stop_row=None, single_value=None, **kw):
     _launch_args(hbase_in, hbase_out, columns, start_row, stop_row, single_value, kw)
-    hadoopy.launch(in_name, out_name, script_path, **kw)
+    return hadoopy.launch(in_name, out_name, script_path, **kw)
 
 
 class HBaseColumnDict(object):
