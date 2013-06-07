@@ -106,6 +106,34 @@ implements InputFormat<TypedBytesWritable, TypedBytesWritable> {
     return trr;
   }
 
+  private String stringFromByteBuffer(ByteBuffer s) {
+      byte[] bytes = s.array();
+      StringBuilder sb = new StringBuilder();
+      for (byte b : bytes) {
+          sb.append(String.format("%02X ", b));
+      }
+      return sb.toString();
+  }
+
+  // Taken from org/apache/cassandra/utils/ByteBufferUtil.java
+  public static int compareUnsigned(ByteBuffer o1, ByteBuffer o2)
+  {
+      assert o1 != null;
+      assert o2 != null;
+      if (o1 == o2)
+          return 0;
+      int end1 = o1.position() + o1.remaining();
+      int end2 = o2.position() + o2.remaining();
+      for (int i = o1.position(), j = o2.position(); i < end1 && j < end2; i++, j++)
+      {
+          int a = (o1.get(i) & 0xff);
+          int b = (o2.get(j) & 0xff);
+          if (a != b)
+              return a - b;
+      }
+      return o1.remaining() - o2.remaining();
+  }
+
   /**
    * Calculates the splits that will serve as input for the map tasks.
    * <ul>
@@ -131,17 +159,21 @@ implements InputFormat<TypedBytesWritable, TypedBytesWritable> {
     // NOTE(brandyn): Here we remove regions that are entirely outside of our start/stop rows
     ByteBuffer emptyStartRow = ByteBuffer.wrap(HConstants.EMPTY_START_ROW);
     ArrayList<byte []> startKeysList = new ArrayList<byte []>();
+    LOG.info("Target Split: [" + stringFromByteBuffer(startRow) + ", " + stringFromByteBuffer(stopRow) + ")");
     for (int i = 0; i < startKeys.length; i++) {
         ByteBuffer curStartKey = ByteBuffer.wrap(startKeys[i]);
         ByteBuffer curEndKey = ByteBuffer.wrap(((i + 1) < startKeys.length) ? startKeys[i + 1]: HConstants.EMPTY_START_ROW);
-        if (startRow != null && curEndKey.compareTo(startRow) < 0 && curEndKey.compareTo(emptyStartRow) != 0) {
-            LOG.info("Skipping split (< start)...");
+        // if cur end row <= start row: This is entirely before the slice we care about
+        if (startRow != null && compareUnsigned(curEndKey, startRow) <= 0 && compareUnsigned(curEndKey, emptyStartRow) != 0) {
+            //LOG.info("Skipping split ( < start)...");
             continue;
         }
-        if (stopRow != null && curStartKey.compareTo(stopRow) > 0) {
-            LOG.info("Skipping split (> stop)...");
+        // if stop row <= cur start row: Slice we care about is entirely before this
+        if (stopRow != null && compareUnsigned(stopRow, curStartKey) <= 0) {
+            //LOG.info("Skipping split ( > stop)...");
             continue;
         }
+        LOG.info("Kept split: [" + stringFromByteBuffer(curStartKey) + ", " + stringFromByteBuffer(curEndKey) + ")");
         startKeysList.add(startKeys[i]);
     }
     startKeys = startKeysList.toArray(new byte[startKeysList.size()][]);
@@ -167,11 +199,11 @@ implements InputFormat<TypedBytesWritable, TypedBytesWritable> {
       ByteBuffer curEndKey = ByteBuffer.wrap(((i + 1) < realNumSplits) ? startKeys[lastPos]: HConstants.EMPTY_START_ROW);
       startPos = lastPos;
       // NOTE(brandyn): Truncate splits that overlap start/end row
-      if (startRow != null && curStartKey.compareTo(startRow) < 0) {
+      if (startRow != null && compareUnsigned(curStartKey, startRow) < 0) {
           LOG.info("Truncating split...");
           curStartKey = startRow;
       }
-      if (stopRow != null && (curEndKey.compareTo(stopRow) > 0 || curEndKey.compareTo(emptyStartRow) == 0)) {
+      if (stopRow != null && (compareUnsigned(curEndKey, stopRow) > 0 || compareUnsigned(curEndKey, emptyStartRow) == 0)) {
           LOG.info("Truncating split...");
           curEndKey = stopRow;
       }
