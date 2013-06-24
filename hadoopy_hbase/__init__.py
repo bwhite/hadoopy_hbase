@@ -9,8 +9,11 @@ import hashlib
 import base64
 
 
-def connect(server='localhost', port=9090):
-    transport = TBufferedTransport(TSocket(server, int(port)))
+def connect(server='localhost', port=9090, timeout=None):
+    socket = TSocket(server, int(port))
+    if timeout is not None:
+        socket.setTimeout(timeout)
+    transport = TBufferedTransport(socket)
     transport.open()
     protocol = TBinaryProtocol.TBinaryProtocolAccelerated(transport)
     client = Hbase.Client(protocol)
